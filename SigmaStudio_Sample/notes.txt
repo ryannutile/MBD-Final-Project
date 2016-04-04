@@ -1,1 +1,172 @@
 //Folder For example format of Sigma Studio Output for reference purposes
+
+Files written:  
+program_data.dat - load file for downloading code using ADI loader
+hex_program_data.dat - load file for downloading code using microcontroller 
+ParamAddress.dat - Parameter RAM locations for schematic instances
+
+
+--------------------
+Sigma Studio Compiler Output:
+
+Compiler###### IC 2 ######
+Sigma Studio Version 3.11. Build 2, Rev 1365
+
+Analog Devices Compiler for the 3rd generation SigmaDSP core.
+Build date = 9/8/2014 at 3:07 PM
+
+## Summary ##
+(Note: Estimates are based on a 48 kHz sample rate)
+
+Instructions used:
+380	(out of a possible 1024 )
+Modulo Data RAM used (X Memory):
+189	(out of a possible 4096 )
+Non Modulo Data RAM used (X Memory):
+0	(out of a possible 4096 )
+Parameter RAM used (Y Memory):
+157	(out of a possible 1024 )
+
+Instance                      		Mips	Inst	Data	Coeff	Other
+                              			(max)
+Mid EQ1                       		108	108	72	30
+Compressor1                   		58	58	19	38
+Compressor2                   		49	49	17	38
+Gen Filter1                   		36	36	30	10
+Mid EQ2                       		27	27	18	15
+Beginning                     		19	19	0	1
+Gen Filter2                   		18	18	15	10
+SafeLoadCode                  		15	15	0	7
+SW vol 1                      		13	13	5	2
+Delay3                        		5	5	3	1
+Delay2                        		5	5	3	1
+Delay1                        		5	5	3	1
+End                           		5	5	0	0
+Input1                        		4	4	2	0
+Mg2                           		3	3	1	1
+Mg3                           		3	3	1	1
+Mg1                           		3	3	0	1
+Output2                       		2	2	0	0
+Output1                       		2	2	0	0
+
+Subroutines called:
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Total                      			380	380	189	157
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+(%)                          			37%	37%	5%	15%
+
+Files written:  
+program_data.dat - load file for downloading code using ADI loader
+hex_program_data.dat - load file for downloading code using microcontroller 
+ParamAddress.dat - Parameter RAM locations for schematic instances
+
+
+############
+Obsolete algorithm code encountered in this project:
+http://wiki.analog.com/resources/tools-software/sigmastudio/usingsigmastudio/buildingschematics/obsoletealgorithms
+
+1. Cell: Delay1, Algorithm: Delay
+2. Cell: Delay2, Algorithm: Delay
+3. Cell: Delay3, Algorithm: Delay
+
+######
+
+
+
+###### IC 2 ######
+Sigma Studio Version 3.11. Build 2, Rev 1365
+
+Analog Devices Compiler for the 3rd generation SigmaDSP core.
+Build date = 9/8/2014 at 3:07 PM
+
+## Summary ##
+(Note: Estimates are based on a 48 kHz sample rate)
+
+Instructions used:
+380	(out of a possible 1024 )
+Modulo Data RAM used (X Memory):
+189	(out of a possible 4096 )
+Non Modulo Data RAM used (X Memory):
+0	(out of a possible 4096 )
+Parameter RAM used (Y Memory):
+157	(out of a possible 1024 )
+
+Instance                      		Mips	Inst	Data	Coeff	Other
+                              			(max)
+Mid EQ1                       		108	108	72	30
+Compressor1                   		58	58	19	38
+Compressor2                   		49	49	17	38
+Gen Filter1                   		36	36	30	10
+Mid EQ2                       		27	27	18	15
+Beginning                     		19	19	0	1
+Gen Filter2                   		18	18	15	10
+SafeLoadCode                  		15	15	0	7
+SW vol 1                      		13	13	5	2
+Delay3                        		5	5	3	1
+Delay2                        		5	5	3	1
+Delay1                        		5	5	3	1
+End                           		5	5	0	0
+Input1                        		4	4	2	0
+Mg2                           		3	3	1	1
+Mg3                           		3	3	1	1
+Mg1                           		3	3	0	1
+Output2                       		2	2	0	0
+Output1                       		2	2	0	0
+
+Subroutines called:
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Total                      			380	380	189	157
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+(%)                          			37%	37%	5%	15%
+
+Files written:  
+program_data.dat - load file for downloading code using ADI loader
+hex_program_data.dat - load file for downloading code using microcontroller 
+ParamAddress.dat - Parameter RAM locations for schematic instances
+
+
+###### IC 2 ######
+Sigma Studio Version 3.11. Build 2, Rev 1365
+
+Analog Devices Compiler for the 3rd generation SigmaDSP core.
+Build date = 9/8/2014 at 3:07 PM
+
+## Summary ##
+(Note: Estimates are based on a 48 kHz sample rate)
+
+Instructions used:
+380	(out of a possible 1024 )
+Modulo Data RAM used (X Memory):
+189	(out of a possible 4096 )
+Non Modulo Data RAM used (X Memory):
+0	(out of a possible 4096 )
+Parameter RAM used (Y Memory):
+157	(out of a possible 1024 )
+
+Instance                      		Mips	Inst	Data	Coeff	Other
+                              			(max)
+Mid EQ1                       		108	108	72	30
+Compressor1                   		58	58	19	38
+Compressor2                   		49	49	17	38
+Gen Filter1                   		36	36	30	10
+Mid EQ2                       		27	27	18	15
+Beginning                     		19	19	0	1
+Gen Filter2                   		18	18	15	10
+SafeLoadCode                  		15	15	0	7
+SW vol 1                      		13	13	5	2
+Delay3                        		5	5	3	1
+Delay2                        		5	5	3	1
+Delay1                        		5	5	3	1
+End                           		5	5	0	0
+Input1                        		4	4	2	0
+Mg2                           		3	3	1	1
+Mg3                           		3	3	1	1
+Mg1                           		3	3	0	1
+Output2                       		2	2	0	0
+Output1                       		2	2	0	0
+
+Subroutines called:
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Total                      			380	380	189	157
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+(%)                          			37%	37%	5%	15%
