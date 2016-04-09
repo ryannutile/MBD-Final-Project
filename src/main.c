@@ -2,34 +2,30 @@
  *@file main.c
  *
  *@brief
- *  - Test audio loopback
+ *  - Audio TX from sound samples (pre-recorded audio data)
  * 
- * 1. Cofigure I2C controller to communicate with codec
- * 2. reads file via JTAG
- * 3. Playback the audio data
- * 4. transfer data using DMA ch.4
+ * 1. Configure I2C/I2S/FIFO to communicate with Codec
+ * 2. Read "sound sample" from file and store into the available chunks.
+ * 3. Begin Transfer of the filled chunk to the FIFO.
+ * 4. Loop the process and transfer to FIFO via Tx ISR.
  *
- * Target:   TLL6537v1-1      
- * Compiler: VDSP++     Output format: VDSP++ "*.dxe"
+ * Target:   Zynq Zedboard
+ * IDE: Xilinx SDK 2015.4
  *
  * @author    Rohan Kangralkar, ECE, Northeastern University  (03/11/09)
- * @date 03/15/2009
+ * @date 03/23/2016
  *
  * LastChange:
- * $Id: main.c 984 2016-03-15 14:29:21Z schirner $
+ * $Id: main.c 1009 2016-04-03 20:00:02Z surya2891 $
  *
  *******************************************************************************/
 
-#include "audioSample.h"
 #include "audioPlayer.h"
+#include "audioSample.h"
 #include "bufferPool_d.h"
 #include "zedboard_freertos.h"
 
-#include "adau1761.h"
 #define VOLUME_MIN (0x2F)
-
-
-
 #define numChunks 561
 #define chunkSize 511
 
@@ -38,7 +34,7 @@
  *****************************************************************************/
 /**
  * @var audioPlayer
- * @brief  global audio player object
+ * @brief  global audio player object - Resolve the instance for more information.
  */
     
 audioPlayer_t            audioPlayer;
@@ -46,12 +42,23 @@ audioPlayer_t            audioPlayer;
 
 int main(void)
 {
-    printf("[MAIN]: Starting Audio Player\r\n");
+	// Initialize the GPIO for button interrupts
+	gpio_init(&audioPlayer);
+	
+	// Initialize the timer for OLED updates
+	ttc_init();
 
+	// Initialize the audio player
     audioPlayer_init(&audioPlayer);
 
-    audioPlayer_start(&audioPlayer);
-
+	// Create the audio player task
+	audioPlayer_start(&audioPlayer);
+	
+	// Start the GPIO task
+	gpio_start()
+	
+	// Start the TTC task
+	ttc_start();
 
 	// start the OS scheduler to kick off the tasks.
 	vTaskStartScheduler();

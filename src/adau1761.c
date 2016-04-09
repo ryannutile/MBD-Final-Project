@@ -1,80 +1,126 @@
-#include "audioPlayer.h"
+#include "audioRxTx.h"
 #include "adau1761.h"
 #include "zedboard_freertos.h"
+#include "audioPlayer.h"
+
+// 0 - Line In; 1 - MIC; 2 - Line In and MIC
+/* Reset the Zedboard to switch between these options - Expect some sinusoidal noise when using MIC at the beginning */
+#define LINE_IN 0
+#define MIC 1
+#define LINE_MIC 2
 
 
-/* internal functions */
-
-/* init I2C driver */
-unsigned char adau1761_I2CMaster_init(tAdau1761 *pThis, unsigned int I2C_DeviceId, unsigned int I2C_CLK);
-/* init ADAU1761 Codec to default settings */
-void adau1761_codec_init(tAdau1761 *pThis);
-/* init the AXI streaming FIFO */
-void adau1761_FIFO_init();
-/* init the axi_iis_adi component */
-void adau1761_iis_init(tAdau1761 *pThis);
-void adau1761_iis_tx_enable();
-
-/* register write access to CODECs internal registers */
-void adau1761_regWrite(tAdau1761 *pThis, unsigned char u8RegAddr, unsigned char u8Data);
-
-
-/* Initializes ADI I2C IP and AXI Streaming FIFO */
-unsigned char adau1761_init(tAdau1761 *pThis)
+/* Initializes I2C/I2S/CODEC and AXI Streaming FIFO */
+unsigned char Adau1761_Init(tAdau1761 *pThis)
 {
-	/* init I2C driver */
-	adau1761_I2CMaster_init(pThis, 0, I2C_CLOCK);
+	/* init PS I2C driver */
+	Adau1761_I2CMaster_Init(pThis, 0, I2C_CLOCK);
 
 	/* init ADAU1761 Codec to default settings */
-	adau1761_codec_init(pThis);
+	Adau1761_Codec_Init(pThis);
 
-	/* init the axi_iis_adi component */
-	adau1761_iis_init(pThis);
+	/* init PL I2S */
+	Adau1761_IIS_Init(pThis);
 
-	/* init the AXI streaming FIFO */
-	adau1761_FIFO_init(pThis);
+	/* init PL AXI streaming FIFO */
+	Adau1761_FIFO_Init(pThis);
 
-	return 0;
+	/* Audio Input Path Source Select - MIC/Line IN, L/R Input Volume  */
+	Adau1761_InSelect(pThis, LINE_MIC, 0xFF, 0xFF);
+
+	return PASS;
+}
+
+/* Refer Page 29 - Record Signal Path */
+void Adau1761_InSelect(tAdau1761 *pThis, unsigned short In_Sel, unsigned short L_In_Vol, unsigned short R_In_Vol){
+
+	switch(In_Sel){
+
+	case MIC:
+			/* MIC configurations - Refer Page 30 */
+			Adau1761_RegWrite(pThis, R8_LEFT_DIFFERENTIAL_INPUT_VOLUME_CONTROL, L_In_Vol); //Set Input Volume - Check datasheet for more options.
+			Adau1761_RegWrite(pThis, R9_RIGHT_DIFFERENTIAL_INPUT_VOLUME_CONTROL, R_In_Vol);
+			Adau1761_RegWrite(pThis, R10_RECORD_MICROPHONE_BIAS_CONTROL, 0x01); // Bias Control enabled and set to default.
+			Adau1761_RegWrite(pThis, R11_ALC_CONTROL_0, 0x13); // ALC controls PGA - Here its set to stereo.
+			Adau1761_RegWrite(pThis, R5_RECORD_MIXER_LEFT_CONTROL_1, 0x10); //20dB LDBOOST, Line In Disabled.
+			Adau1761_RegWrite(pThis, R7_RECORD_MIXER_RIGHT_CONTROL_1, 0x10);//20dB LD Boost, Line In Disabled.
+			break;
+	case LINE_IN:
+			/* Line IN and LD Boost (output of PGA) Configurations */
+			Adau1761_RegWrite(pThis, R5_RECORD_MIXER_LEFT_CONTROL_1, 0x07); //Mute Mic, Enable Line In.
+			Adau1761_RegWrite(pThis, R7_RECORD_MIXER_RIGHT_CONTROL_1, 0x07);//Mute Mic, Enable Line In.
+			break;
+
+	case LINE_MIC:
+			/* MIC configurations - Refer Page 30 */
+			Adau1761_RegWrite(pThis, R8_LEFT_DIFFERENTIAL_INPUT_VOLUME_CONTROL, L_In_Vol);
+			Adau1761_RegWrite(pThis, R9_RIGHT_DIFFERENTIAL_INPUT_VOLUME_CONTROL, R_In_Vol);
+			Adau1761_RegWrite(pThis, R10_RECORD_MICROPHONE_BIAS_CONTROL, 0x01); // Bias Control enabled and set to default.
+			Adau1761_RegWrite(pThis, R11_ALC_CONTROL_0, 0x13); // ALC controls PGA - Here its set to stereo.
+			/* Line IN and LD Boost (output of PGA) Configurations */
+			Adau1761_RegWrite(pThis, R5_RECORD_MIXER_LEFT_CONTROL_1, 0x17); //Zero gain LD Boost, Enable Line In.
+			Adau1761_RegWrite(pThis, R7_RECORD_MIXER_RIGHT_CONTROL_1, 0x17);//Zero gain LD Boost, Enable Line In.
+			break;
+
+	default:
+		printf("Input Path Select Exception\n");
+	}
+}
+
+/* Output Volume Control - HPH Vol could be controlled the same way */
+void AudioPlayer_SetOut_LineVol(tAdau1761 *pThis, unsigned short Line_Vol){
+
+	/* LINE OUT Vol Control - Range: 0x03 - 0xFF (-57dB to 6dB) */
+	Adau1761_RegWrite(pThis, R31_PLAYBACK_LINE_OUTPUT_LEFT_VOLUME_CONTROL, Line_Vol);
+	Adau1761_RegWrite(pThis, R32_PLAYBACK_LINE_OUTPUT_RIGHT_VOLUME_CONTROL, Line_Vol);
+
 }
 
 /* init the axi_iis_adi component */
-void adau1761_iis_init(tAdau1761 *pThis) {
+void Adau1761_IIS_Init(tAdau1761 *pThis) {
 
-	//Reset I2S TX
-	Xil_Out32(AXI_I2S_REGISTER(AXI_I2S_REG_RESET), AXI_I2S_RESET_TX_FIFO);
+	unsigned char bclk_div =0x0;
+	unsigned int bclk_rate=0x0;
 
-	//configure I2S clock dividers
-	unsigned char bclk_div, word_size;
-	unsigned int bclk_rate;
+	/* Reset I2S TX/RX */
+	Xil_Out32(AXI_I2S_REGISTER(AXI_I2S_REG_RESET), (AXI_I2S_RESET_TX_FIFO | AXI_I2S_RESET_RX_FIFO));
 
 	bclk_rate = AXI_I2S_RATE * AXI_I2S_BITS_PER_FRAME;
-	word_size = AXI_I2S_BITS_PER_FRAME / 2 - 1;
-
 	bclk_div = (AXI_I2S_REF_CLK / bclk_rate) / 2 -1;
 
+	/* set I2S sampling frequency */
+	Adau1761_IIS_SetSamplingFreq(pThis, bclk_div);
+	/* Enable I2S TX */
+	Adau1761_IIS_TX_Enable();
+}
+
+void Adau1761_IIS_TX_Enable()
+{
+	 Xil_Out32(AXI_I2S_REGISTER(AXI_I2S_REG_CTRL), (AXI_I2S_CTRL_TX_EN | AXI_I2S_CTRL_RX_EN));
+}
+
+/* Init I2S clock, sampling freq */
+void Adau1761_IIS_SetSamplingFreq(tAdau1761 *pThis, unsigned char bclk_div ){
+
+	unsigned char word_size = AXI_I2S_BITS_PER_FRAME / 2 - 1;
+	//configure I2S clock dividers
 	Xil_Out32(AXI_I2S_REGISTER(AXI_I2S_REG_CLK_CTRL), (word_size<<16)|bclk_div);
 
-	//enable I2S TX
-	adau1761_iis_tx_enable();
 }
 
-void adau1761_iis_tx_enable()
-{
-	Xil_Out32(AXI_I2S_REGISTER(AXI_I2S_REG_CTRL), AXI_I2S_CTRL_TX_EN);
-}
 
 /* ---------------------------------------------------------------------------- *
- * 								AudioCodec_Config()								*
+ * 								AUDIO_CODEC_CONFIG - ADAU1761					*
  * ---------------------------------------------------------------------------- *
- * Configures audio codes's internal PLL. With MCLK = 10 MHz it configures the
+ * Configures Audio codes's internal PLL. With MCLK = 10 MHz it configures the
  * PLL for a VCO frequency = 49.152 MHz, and an audio sample rate of 48 KHz.
  * ---------------------------------------------------------------------------- */
-void adau1761_codec_init(tAdau1761 *pThis) {
+void Adau1761_Codec_Init(tAdau1761 *pThis) {
 
 	unsigned char u8TxData[8], u8RxData[6];
 
 	// Disable Core Clock
-	adau1761_regWrite(pThis, R0_CLOCK_CONTROL, 0x0E);
+	Adau1761_RegWrite(pThis, R0_CLOCK_CONTROL, 0x0E);
 
 	/* 	MCLK = 12.288 MHz
 		R = 0100 = 4
@@ -85,7 +131,7 @@ void adau1761_codec_init(tAdau1761 *pThis) {
 		PLLout/MCLK			= 49.152 MHz/12.288 MHz
 							= 4 */
 
-	// Write 6 bytes to R1 @ register address 0x4002
+	// Write 6 bytes to R1 @ CODEC's Config Register address: 0x4002
 	u8TxData[0] = 0x40; // Register write address [15:8]
 	u8TxData[1] = 0x02; // Register write address [7:0]
 	u8TxData[2] = 0x00; // byte 6 - M[15:8]
@@ -99,7 +145,7 @@ void adau1761_codec_init(tAdau1761 *pThis) {
 	XIicPs_MasterSendPolled(&(pThis->Iic), u8TxData, 8, (IIC_SLAVE_ADDR >> 1));
 	while(XIicPs_BusIsBusy(&pThis->Iic));
 
-	// Register address set: 0x4002
+	// CODEC's Config Register address set: 0x4002
 	u8TxData[0] = 0x40;
 	u8TxData[1] = 0x02;
 
@@ -112,46 +158,65 @@ void adau1761_codec_init(tAdau1761 *pThis) {
 	}
 	while((u8RxData[5] & 0x02) == 0); // while not locked
 
-	adau1761_regWrite(pThis, R0_CLOCK_CONTROL, 0x0F);	// 1111
+	Adau1761_RegWrite(pThis, R0_CLOCK_CONTROL, 0x0F);	// 1111
 												// bit 3:		CLKSRC = PLL Clock input
 												// bits 2:1:	INFREQ = 1024 x fs
 												// bit 0:		COREN = Core Clock enabled
 
-	//Initialize ADAU1761 control ports. (Refer to Page 51 of the ADAU1761 datasheet)
+	//Initialize ADAU1761 control registers. (Refer to Page 51 of the ADAU1761 data sheet)
 
-	adau1761_regWrite(pThis, R16_SERIAL_PORT_CONTROL_1, 0x00);
-	adau1761_regWrite(pThis, R17_CONVERTER_CONTROL_0, 0x05);//48 KHz
-	adau1761_regWrite(pThis, R64_SERIAL_PORT_SAMPLING_RATE, 0x05);//48 KHz
-	adau1761_regWrite(pThis, R19_ADC_CONTROL, 0x13);
-	adau1761_regWrite(pThis, R36_DAC_CONTROL_0, 0x03);
-	adau1761_regWrite(pThis, R35_PLAYBACK_POWER_MANAGEMENT, 0x03);
-	adau1761_regWrite(pThis, R58_SERIAL_INPUT_ROUTE_CONTROL, 0x01);
-	adau1761_regWrite(pThis, R59_SERIAL_OUTPUT_ROUTE_CONTROL, 0x01);
-	adau1761_regWrite(pThis, R65_CLOCK_ENABLE_0, 0x7F);
-	adau1761_regWrite(pThis, R66_CLOCK_ENABLE_1, 0x03);
+	/*Initialize CODEC I2S port*/
+	Adau1761_RegWrite(pThis, R16_SERIAL_PORT_CONTROL_1, 0x00);
 
-	adau1761_regWrite(pThis, R4_RECORD_MIXER_LEFT_CONTROL_0, 0x01);
-	adau1761_regWrite(pThis, R5_RECORD_MIXER_LEFT_CONTROL_1, 0x05);
-	adau1761_regWrite(pThis, R6_RECORD_MIXER_RIGHT_CONTROL_0, 0x01);
-	adau1761_regWrite(pThis, R7_RECORD_MIXER_RIGHT_CONTROL_1, 0x05);
+	/* Set ADC/DAC sampling rate - 32kHz*/
+	Adau1761_RegWrite(pThis, R17_CONVERTER_CONTROL_0, 0x05);
+	Adau1761_RegWrite(pThis, R64_SERIAL_PORT_SAMPLING_RATE, 0x05);
 
-	adau1761_regWrite(pThis, R22_PLAYBACK_MIXER_LEFT_CONTROL_0, 0x21);
-	adau1761_regWrite(pThis, R24_PLAYBACK_MIXER_RIGHT_CONTROL_0, 0x41);
-	adau1761_regWrite(pThis, R26_PLAYBACK_LR_MIXER_LEFT_LINE_OUTPUT_CONTROL, 0x03);
-	adau1761_regWrite(pThis, R27_PLAYBACK_LR_MIXER_RIGHT_LINE_OUTPUT_CONTROL, 0x09);
-	adau1761_regWrite(pThis, R29_PLAYBACK_HEADPHONE_LEFT_VOLUME_CONTROL, 0xE7);
-	adau1761_regWrite(pThis, R30_PLAYBACK_HEADPHONE_RIGHT_VOLUME_CONTROL, 0xE7);
-	adau1761_regWrite(pThis, R31_PLAYBACK_LINE_OUTPUT_LEFT_VOLUME_CONTROL, 0xE7);
-	adau1761_regWrite(pThis, R32_PLAYBACK_LINE_OUTPUT_RIGHT_VOLUME_CONTROL, 0xE7);
+	/*ADC/DAC CNTL - 2 ADC/DAC enabled; others set to default */
+	Adau1761_RegWrite(pThis, R19_ADC_CONTROL, 0x13);
+	Adau1761_RegWrite(pThis, R36_DAC_CONTROL_0, 0x03);
+
+	/* No POWER MANAGEMENT set here - all enabled for now */
+	Adau1761_RegWrite(pThis, R35_PLAYBACK_POWER_MANAGEMENT, 0x03);
+
+    /* Input/Output routes of ADC/DAC, clock control */
+	Adau1761_RegWrite(pThis, R58_SERIAL_INPUT_ROUTE_CONTROL, 0x01);
+	Adau1761_RegWrite(pThis, R59_SERIAL_OUTPUT_ROUTE_CONTROL, 0x01);
+	Adau1761_RegWrite(pThis, R65_CLOCK_ENABLE_0, 0x7F);
+	Adau1761_RegWrite(pThis, R66_CLOCK_ENABLE_1, 0x03);
+
+
+	/* Mixer - Enable's sources that influence the play back/Audio Input path - Refer Page 29 and 35 */
+
+	/* Audio Input Mixer */
+	Adau1761_RegWrite(pThis, R4_RECORD_MIXER_LEFT_CONTROL_0, 0x01); //Mixer 1 Enable.
+	Adau1761_RegWrite(pThis, R6_RECORD_MIXER_RIGHT_CONTROL_0, 0x01);//Mixer 2 Enable.
+
+
+	/* Play back Path Mixer to the DAC's */
+	Adau1761_RegWrite(pThis, R22_PLAYBACK_MIXER_LEFT_CONTROL_0, 0x21);
+	Adau1761_RegWrite(pThis, R24_PLAYBACK_MIXER_RIGHT_CONTROL_0, 0x41);
+	Adau1761_RegWrite(pThis, R26_PLAYBACK_LR_MIXER_LEFT_LINE_OUTPUT_CONTROL, 0x03);
+	Adau1761_RegWrite(pThis, R27_PLAYBACK_LR_MIXER_RIGHT_LINE_OUTPUT_CONTROL, 0x09);
+
+	/* Volume Control Options */
+
+	/* HPH OUT Vol Control - Range: 0x03 - 0xFF (-57dB to 6dB) */
+	Adau1761_RegWrite(pThis, R29_PLAYBACK_HEADPHONE_LEFT_VOLUME_CONTROL, 0xE7);
+	Adau1761_RegWrite(pThis, R30_PLAYBACK_HEADPHONE_RIGHT_VOLUME_CONTROL, 0xE7);
+
+	/* LINE OUT Vol Control - Range: 0x03 - 0xFF (-57dB to 6dB) */
+	Adau1761_RegWrite(pThis, R31_PLAYBACK_LINE_OUTPUT_LEFT_VOLUME_CONTROL, 0xFF);
+	Adau1761_RegWrite(pThis, R32_PLAYBACK_LINE_OUTPUT_RIGHT_VOLUME_CONTROL, 0xFF);
 
 }
 
 /* ---------------------------------------------------------------------------- *
- * 									IicConfig()									*
+ * 									PS-IicConfig()									*
  * ---------------------------------------------------------------------------- *
  * IIC initialization with clock configuration.
  * ---------------------------------------------------------------------------- */
-unsigned char adau1761_I2CMaster_init(tAdau1761 *pThis, unsigned int I2C_DeviceId, unsigned int I2C_CLK)
+unsigned char Adau1761_I2CMaster_Init(tAdau1761 *pThis, unsigned int I2C_DeviceId, unsigned int I2C_CLK)
 {
 	XIicPs_Config *Config;
 
@@ -159,12 +224,12 @@ unsigned char adau1761_I2CMaster_init(tAdau1761 *pThis, unsigned int I2C_DeviceI
 	XIicPs_CfgInitialize(&(pThis->Iic), Config, Config->BaseAddress);
 	XIicPs_SetSClk(&(pThis->Iic), I2C_CLK);
 
-	return 0;
+	return PASS;
 }
 
 
 /* init the AXI streaming FIFO */
-void adau1761_FIFO_init(tAdau1761 *pThis)
+void Adau1761_FIFO_Init(tAdau1761 *pThis)
 {
 	//Reset AXI-Streaming FIFO Transmit side
 	*(volatile u32 *) (FIFO_BASE_ADDR + FIFO_TX_RESET) = FIFO_TX_RESET_VALUE;
@@ -177,22 +242,23 @@ void adau1761_FIFO_init(tAdau1761 *pThis)
 	*(volatile u32 *) (FIFO_BASE_ADDR + FIFO_RX_DES) = 0x00;
 
 	/* Reset the core and generate the external reset by writing to the Local Link Reset Register. */
-	*(volatile u32 *) (FIFO_BASE_ADDR + FIFO_LLR_OFFSET) = FIFO_LLR_RESET_VALUE;
+	//*(volatile u32 *) (FIFO_BASE_ADDR + FIFO_LLR_OFFSET) = FIFO_LLR_RESET_VALUE;
 
 	/* clear all pending interrupts */
 	*(volatile u32 *) (FIFO_BASE_ADDR + FIFO_INT_STATUS) = 0xffffffff;
 
 	/* Enable TFPE interrupt to propagate */
-	*(volatile u32 *) (FIFO_BASE_ADDR + FIFO_INT_ENABLE) = FIFO_INT_TFPE;
+	*(volatile u32 *) (FIFO_BASE_ADDR + FIFO_INT_ENABLE) =  (FIFO_INT_RFPF) | (FIFO_INT_TFPE);
+
 }
 
 /* ---------------------------------------------------------------------------- *
- * 								ADAU1761_RegWrite									*
+ * 								Adau1761_RegWrite									*
  * ---------------------------------------------------------------------------- *
- * Function to write one byte (8-bits) to one of the registers from the audio
- * controller via I2C --
+ * Function to write one byte (8-bits) to one of the registers in the Audio
+ * Controller via I2C
  * ---------------------------------------------------------------------------- */
-void adau1761_regWrite(tAdau1761 *pThis, unsigned char u8RegAddr, unsigned char u8Data) {
+void Adau1761_RegWrite(tAdau1761 *pThis, unsigned char u8RegAddr, unsigned char u8Data) {
 
 	unsigned char u8TxData[3];
 
@@ -202,12 +268,4 @@ void adau1761_regWrite(tAdau1761 *pThis, unsigned char u8RegAddr, unsigned char 
 
 	XIicPs_MasterSendPolled(&pThis->Iic, u8TxData, 3, (IIC_SLAVE_ADDR >> 1));
 	while(XIicPs_BusIsBusy(&pThis->Iic));
-}
-
-void audioPlayer_setvolume(audioPlayer_t *pThis){
-
-	// Supports only for Mono as of now.
-	adau1761_regWrite(&pThis->codec, R31_PLAYBACK_LINE_OUTPUT_LEFT_VOLUME_CONTROL, pThis->volume);
-	adau1761_regWrite(&pThis->codec, R32_PLAYBACK_LINE_OUTPUT_RIGHT_VOLUME_CONTROL, pThis->volume);
-
 }

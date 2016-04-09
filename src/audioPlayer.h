@@ -19,20 +19,17 @@
 #define _AUDIO_PLAYER_H_
 
 #include "bufferPool_d.h"
-#include "audioRx.h"
-#include "audioTx.h"
+#include "audioRxTx.h"
 #include "adau1761.h"
 
-/** audioPlayer object
- */
+/** audioPlayer object **/
 typedef struct {
-  audioRx_t      	rx;  /* receive object */
-  audioTx_t      	tx;  /* transmit object */
+  audioRxTx_t      	Audio;  /* transmit/recieve object */
   bufferPool_d_t   	bp;  /* buffer pool */
-  int 					volume;	/* Volume of the audio player */
-  unsigned int 	frequency;	/* Frequency of the audio player */
-  chunk_d_t            *chunk;  /* Chunk for copy */
-  tAdau1761 codec;  /* audio codec */
+  int 				volume;	/* Volume of the audio player */
+  unsigned int 		frequency;	/* Frequency of the audio player */
+  chunk_d_t         *chunk;  /* Chunk for copy */
+  tAdau1761 		codec;  /* audio codec */
 } audioPlayer_t;
 
 /** initialize audio player 
@@ -41,6 +38,18 @@ typedef struct {
  *@return 0 success, non-zero otherwise
  **/
 int audioPlayer_init(audioPlayer_t *pThis);
+
+/** increase audio volume
+ *@param pThis  pointer to own object 
+ *
+ **/
+void audioPlayer_volumeIncrease(audioPlayer_t *pThis);
+
+/** decrease audio volume
+ *@param pThis  pointer to own object 
+ *
+ **/
+void audioPlayer_volumeDecrease(audioPlayer_t *pThis);
 
 /** startup phase after initialization 
  *@param pThis  pointer to own object 
@@ -57,6 +66,3 @@ int audioPlayer_start(audioPlayer_t *pThis);
 void audioPlayer_task(void *pArg);
 
 #endif
-
-
-

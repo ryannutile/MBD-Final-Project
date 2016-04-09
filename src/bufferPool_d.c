@@ -32,10 +32,12 @@
 int bufferPool_d_init(bufferPool_d_t *pThis, int numChunks, int chunkSize) {
 	int count = 0;
 
+	pThis->bytesPerChunk = chunkSize;
+
 	/* allocate memory for all chunk data structures*/
 	pThis->buffer = (chunk_d_t*) malloc(numChunks * sizeof(chunk_d_t));
 
-	// init queue
+	// Init freelist queue
 	// Note: queue will contain pointer to chunk structure
 	pThis->freeList = xQueueCreate( numChunks, sizeof(chunk_d_t*) );
 
@@ -59,14 +61,14 @@ int bufferPool_d_init(bufferPool_d_t *pThis, int numChunks, int chunkSize) {
 		}
 
 		// put initialized chunk into queue
-		if(xQueueSend( pThis->freeList, &pChunk, ( TickType_t ) 10 ) != pdPASS) {
+		if(xQueueSend( pThis->freeList, &pChunk, NULL ) != pdPASS) {
 			printf("Failed to put chunk %d/%d \n", count, numChunks);
 			return -1;
 		}
 	}
 
 	printf("[BP_d]: Initialized\n");
-	return 1;
+	return PASS;
 }
 
 /** Get a chunk from the  buffer pool 
@@ -79,20 +81,37 @@ int bufferPool_d_init(bufferPool_d_t *pThis, int numChunks, int chunkSize) {
  * @return PASS/Zero on success.
  * Negative FAIL/value on failure.
  */
-int bufferPool_d_acquire(bufferPool_d_t *pThis, chunk_d_t **ppChunk,
-		int chunkSize) {
+int bufferPool_d_acquire(bufferPool_d_t *pThis, chunk_d_t **ppChunk) {
 	if (NULL == pThis || NULL == ppChunk) {
 		printf("[BP_d]: Acquire failed\n");
 		return -1;
 	}
 
 	if( !xQueueReceive( pThis->freeList, ppChunk, ( TickType_t ) 0)) {
-		printf("[BP_d]: No free buffer pool samples available\n");
+		//printf("[BP_d]: No free buffer pool samples avaialable\n");
 		*ppChunk = NULL;
 		return -1;
 	}
-	/* declare that chunk is empty */
-	(*ppChunk)->bytesMax  = chunkSize;
+	/* declare that chunk is  empty */
+	(*ppChunk)->bytesMax  = pThis->bytesPerChunk;
+	(*ppChunk)->bytesUsed = 0;
+	return 1;
+}
+
+
+int bufferPool_d_acquire_ISR(bufferPool_d_t *pThis, chunk_d_t **ppChunk ) {
+	if (NULL == pThis || NULL == ppChunk) {
+		printf("[BP_d ISR ]: Acquire failed\n");
+		return -1;
+	}
+
+	if( !xQueueReceiveFromISR( pThis->freeList, ppChunk, NULL)) {
+		printf("[BP_d ISR]: No free buffer pool samples available\n");
+		*ppChunk = NULL;
+		return -1;
+	}
+	/* declare that chunk is  empty */
+	(*ppChunk)->bytesMax  = pThis->bytesPerChunk;
 	(*ppChunk)->bytesUsed = 0;
 	return 1;
 }
@@ -115,7 +134,7 @@ int bufferPool_d_release(bufferPool_d_t *pThis, chunk_d_t *pChunk) {
 	}
 
 	if(xQueueSend( pThis->freeList, &pChunk, ( TickType_t ) 10 ) != pdPASS) {
-	//if (-1 == FREEROT_queue_d_put(&pThis->freeList, (void **) pChunk)) {
+		printf("Error in releasing the chunk to the freelist\n");
 		pChunk = NULL;
 		return -1;
 	}
@@ -140,7 +159,6 @@ int bufferPool_d_release_from_ISR(bufferPool_d_t *pThis, chunk_d_t *pChunk) {
 	}
 
 	if(xQueueSendFromISR( pThis->freeList, &pChunk, ( TickType_t ) 10 ) != pdPASS) {
-	//if (-1 == FREEROT_queue_d_put(&pThis->freeList, (void **) pChunk)) {
 		pChunk = NULL;
 		return -1;
 	}

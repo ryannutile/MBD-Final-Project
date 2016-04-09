@@ -1,8 +1,8 @@
 /**
- *@file audioRx.c
+ *@file audioTx.c
  *
  *@brief
- *  - receive audio samples from DMA
+ *  - transmission of audio
  *
  * Target:   TLL6537v1-1      
  * Compiler: VDSP++     Output format: VDSP++ "*.dxe"
@@ -11,50 +11,51 @@
  * @date 03/15/2009
  *
  * LastChange:
- * $Id: audioRx.h 811 2013-03-11 22:11:55Z ovaskevi $
+ * $Id: audioTx.h 812 2013-03-12 02:28:57Z ovaskevi $
  *
  *******************************************************************************/
-#ifndef _AUDIO_RX_H_
-#define _AUDIO_RX_H_
+#ifndef _AUDIO_TX_H_
+#define _AUDIO_TX_H_
 
-//#include "queue.h"
 #include "bufferPool_d.h"
+#include "adau1761.h"
 #include "audioSample.h"
+
 
 /***************************************************
             DEFINES
 ***************************************************/   
 /**
- * @def AUDIORX_QUEUE_DEPTH
- * @brief rx queue depth
+ * @def AUDIOTX_QUEUE_DEPTH
+ * @brief tx queue depth
  */
+#define AUDIOTX_QUEUE_DEPTH 30
 #define AUDIORX_QUEUE_DEPTH 30
-
 
 /***************************************************
             DATA TYPES
 ***************************************************/
 
-/** audio RX object
+/** audio RX and TX objects
  */
 typedef struct {
-  QueueHandle_t queue;  /* queue for received buffers */
+  QueueHandle_t rx_queue;  /* queue for received buffers */
+  QueueHandle_t tx_queue;  /* queue for transmit buffers */
   chunk_d_t        *pPending; /* pointer to pending chunk just in receiving */
   bufferPool_d_t   *pBuffP; /* pointer to buffer pool */
   audioSample_t  audioSample;
-} audioRx_t;
+  int              running; /* ISR/polling - which one should execute? */
+} audioRxTx_t;
 
 
 /***************************************************
             Access Methods 
 ***************************************************/
 
-
-
-/** Initialize audio rx
+/** Initialize audio tx
  *    - get pointer to buffer pool
  *    - register interrupt handler
- *    - initialize RX queue
+ *    - initialize TX queue
 
  * Parameters:
  * @param pThis  pointer to own object
@@ -64,44 +65,57 @@ typedef struct {
  * @return Zero on success.
  * Negative value on failure.
  */
-int audioRx_init(audioRx_t *pThis, bufferPool_d_t *pBuffP);
+int audioRxTx_init(audioRxTx_t *pThis, bufferPool_d_t *pBuffP);
 
-/** start audio rx
- *    - start receiving first chunk from DMA
- *      - acqurie chunk from pool 
- *      - config DMA 
- *      - start DMA + SPORT
+/** start audio tx
+ *   - empthy for now
  * Parameters:
  * @param pThis  pointer to own object
  *
  * @return Zero on success.
  * Negative value on failure.
  */
-int audioRx_start(audioRx_t *pThis);
+int audioRxTx_start(audioRxTx_t *pThis);
 
 
-/** audio rx isr  (to be called from dispatcher) 
-
+/** audio rtx isr  (to be called from dispatcher) 
+ *   - get chunk from tx queue
+ *    - if valid, release old pending chunk to buffer pool 
+ *    - configure DMA 
+ *    - if not valide, configure DMA to replay same chunk again
  * Parameters:
  * @param pThis  pointer to own object
  *
  * @return None 
  */
-void audioRx_isr(void *pThis);
+void audioRxTx_isr(void *pThis);
 
-/** audio rx get 
- *   copyies a filled chunk into pChunk
- *   blocking call, blocks if queue is empty 
- *     - get from queue 
- *     - copy in to pChunk
- *     - release chunk to buffer pool 
+/** audioRxTx put
+ *   copies filled pChunk into the TX queue for transmission
+ *    if queue is full, then chunk is dropped 
  * Parameters:
  * @param pThis  pointer to own object
  *
  * @return Zero on success.
  * Negative value on failure.
  */
-int audioRx_get(audioRx_t *pThis, chunk_d_t **pChunk);
+int audioRxTx_put(audioRxTx_t *pThis, chunk_d_t *pChunk);
+
+
+/** audioRxTx get
+ *   copies a filled chunk into pChunk
+ *   blocking call, blocks if queue is empty
+ *     - get from queue
+ *     - copy in to pChunk
+ *     - release chunk to buffer pool
+ * Parameters:
+ * @param pThis  pointer to own object
+ *
+ * @return Zero on success.
+ * Negative value on failure.
+ */
+int audioRxTx_get(audioRxTx_t *pThis, chunk_d_t **pChunk);
+
 
 
 #endif

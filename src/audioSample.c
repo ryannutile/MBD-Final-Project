@@ -20,8 +20,6 @@
 extern unsigned int snd_samples[];
 extern unsigned int snd_samples_nSamples;
 
-
-
 /**
  * Initialize the audioSample structure
  *  - set the memory start

@@ -4,6 +4,78 @@
 #include "xparameters.h"
 #include "zedboard_freertos.h"
 
+												/* Class Definition */
+typedef struct {
+	XLlFifo ToI2S; // structure for FIFO to I2S
+	XIicPs Iic;    // driver for I2C
+} tAdau1761;
+
+
+												/* Function Prototypes */
+unsigned char adau1761_init(tAdau1761*);
+
+void ReadSamples(unsigned int*, unsigned int);
+
+/* CODEC/FIFO Init Functions */
+
+/* init I2C driver */
+unsigned char Adau1761_I2CMaster_Init(tAdau1761*, unsigned int, unsigned int);
+/* init ADAU1761 Codec to default settings */
+void Adau1761_Codec_Init(tAdau1761*);
+/* init the AXI streaming FIFO */
+void Adau1761_FIFO_Init();
+/* init the I2S component */
+void Adau1761_IIS_Init(tAdau1761*);
+/* Enable/Disable I2S */
+void Adau1761_IIS_TX_Enable();
+/* I2S sampling frequency */
+void Adau1761_IIS_SetSamplingFreq(tAdau1761*, unsigned char);
+/* register write access to CODECs internal configuration registers */
+void Adau1761_RegWrite(tAdau1761*, unsigned char, unsigned char);
+/* Audio Input Path Source Select - MIC/Line IN */
+void Adau1761_InSelect(tAdau1761*, unsigned short, unsigned short, unsigned short);
+
+void AudioPlayer_SetOut_LineVol(tAdau1761*, unsigned short);
+
+											      /* FIFO MMR Addresses */
+
+/* FIFO MMR Address resolutions */
+#define FIFO_BASE_ADDR 0x43C00000
+
+#define FIFO_TX_VAC 0x0000000c  /**< Transmit Vacancy */
+#define FIFO_TX_DATA 0x00000010  /**< Transmit Data */
+#define FIFO_TX_LENGTH  0x00000014  /**< Transmit Length */
+#define FIFO_TX_RESET 0x00000008  /**< Transmit Reset */
+#define FIFO_TX_DES  0x0000002C  /**< Transmit Destination  */
+
+#define FIFO_RX_OCC 0x0000001c  /**< Receive Occupancy */
+#define FIFO_RX_DATA 0x00000020  /**< Receive Data */
+#define FIFO_RX_RESET 0x00000018  /**< Receive Reset */
+#define FIFO_RX_LENGTH  0x00000024  /**< Receive Length */
+#define FIFO_RX_DES  0x00000030  /**< Receive Destination  */
+
+#define FIFO_TX_RESET_VALUE 0x000000a5 /**< Transmit reset value */
+#define FIFO_RX_RESET_VALUE 0x000000a5 /**< Receive reset value */
+
+#define FIFO_LLR_OFFSET  0x00000028  /**< Local Link Reset */
+#define FIFO_LLR_RESET_VALUE         0x000000a5 /**< Local Link reset value */
+
+#define FIFO_INT_ENABLE  0x00000004  /**< Interrupt Enable Register */
+#define FIFO_INT_STATUS  0x00000000  /**< Interrupt Enable Register */
+
+/** FIFO INT TYPE DEFINITIONS */
+#define FIFO_INT_RFPE (0x1 << 19) /**< Receive FIFO Programmable Empty  */
+#define FIFO_INT_RFPF (0x1 << 20) /**< Receive FIFO Programmable Full   */
+#define FIFO_INT_TFPE (0x01 << 21) /**< Transmit FIFO Programmable Empty */
+#define FIFO_INT_TFPF (0x01 << 22) /**< Transmit FIFO Programmable Full  */
+
+
+												/* I2S/IIC Address Details */
+
+/* Define slave address for the ADAU1761 audio controller 8 */
+#define IIC_SLAVE_ADDR			0x76
+#define I2C_CLOCK   (400000)
+
 //ADI I2S IP Base Address.
 #define I2S_BASE_ADDR 0x43C10000
 
@@ -26,7 +98,7 @@
 //sample rate and clocks
 #define AXI_I2S_BITS_PER_FRAME 64
 #define AXI_I2S_REF_CLK 12288000
-#define AXI_I2S_RATE 20000
+#define AXI_I2S_RATE 48000
 
 //register select helper
 #define AXI_I2S_REGISTER(x) (I2S_BASE_ADDR + x)
@@ -35,13 +107,11 @@
 #define AUDIO_SAMPLES_STEREO 1
 #define AUDIO_SAMPLES_MONO   0
 
-typedef struct {
-	XLlFifo ToI2S; // structure for FIFO to I2S
-	XIicPs Iic;    // driver for I2C
-} tAdau1761;
-
-
-#define I2C_CLOCK   (400000)
+#define I2S_DATA_RX_L_REG 0x00
+#define	I2S_DATA_RX_R_REG 0x04
+#define	I2S_DATA_TX_L_REG 0x08
+#define	I2S_DATA_TX_R_REG 0x0c
+#define	I2S_STATUS_REG 0x10
 
 
 /* ADAU internal registers */
@@ -99,46 +169,5 @@ enum audio_regs {
 	R65_CLOCK_ENABLE_0 								= 0xF9,
 	R66_CLOCK_ENABLE_1 								= 0xFA
 };
-
-
-
-/* Define slave address for the ADAU1761 audio controller 8 */
-#define IIC_SLAVE_ADDR			0x76
-
-/* FIFO MMR Address resolutions */
-#define FIFO_BASE_ADDR 0x43C00000
-
-#define FIFO_TX_VAC 0x0000000c  /**< Transmit Vacancy */
-#define FIFO_TX_DATA 0x00000010  /**< Transmit Data */
-#define FIFO_TX_LENGTH  0x00000014  /**< Transmit Length */
-#define FIFO_TX_RESET 0x00000008  /**< Transmit Reset */
-#define FIFO_TX_DES  0x0000002C  /**< Transmit Destination  */
-
-#define FIFO_RX_VAC 0x0000001c  /**< Receive Occupancy */
-#define FIFO_RX_DATA 0x00000020  /**< Receive Data */
-#define FIFO_RX_RESET 0x00000018  /**< Receive Reset */
-#define FIFO_RX_LENGTH  0x00000024  /**< Receive Length */
-#define FIFO_RX_DES  0x00000030  /**< Receive Destination  */
-
-#define FIFO_TX_RESET_VALUE 0x000000a5 /**< Transmit reset value */
-#define FIFO_RX_RESET_VALUE 0x000000a5 /**< Receive reset value */
-
-#define FIFO_LLR_OFFSET  0x00000028  /**< Local Link Reset */
-#define FIFO_LLR_RESET_VALUE         0x000000a5 /**< Local Link reset value */
-
-#define FIFO_INT_ENABLE  0x00000004  /**< Interrupt Enable Register */
-#define FIFO_INT_STATUS  0x00000000  /**< Interrupt Enable Register */
-
-/** bits within int status */
-#define FIFO_INT_RFPE (0x01 << 19) /**< Receive FIFO Programmable Empty  */
-#define FIFO_INT_RFPF (0x01 << 20) /**< Receive FIFO Programmable Full   */
-#define FIFO_INT_TFPE (0x01 << 21) /**< Transmit FIFO Programmable Empty */
-#define FIFO_INT_TFPF (0x01 << 22) /**< Transmit FIFO Programmable Full  */
-
-/* Prototype Functions */
-unsigned char adau1761_init(tAdau1761 *pThis);
-
-void ReadSamples(unsigned int * sampleBuffer, unsigned int sampleCount);
-
 
 #endif

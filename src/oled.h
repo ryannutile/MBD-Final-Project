@@ -1,0 +1,30 @@
+#if undef __OLED_H__
+#define __OLED_H__
+
+#include<iostream>
+#include<fstream>
+
+
+#define OLED_BAND_NUM       8 // update this 
+#define OLED_BAND_WIDTH    14 // update this too
+
+#define OLED_SCRN_WIDTH   128
+#define OLED_SCRN_HEIGHT   64
+
+#define OLED_NUM_WIDTH	  	5
+#define OLED_NUM_HEIGHT 	9
+
+uint8_t numBitmaps[8][5] = [[010000010, 010000010, 011111110, 000000010, 000000010], 
+							[010011110, 010010010, 010010010, 010010010, 011110010],
+							[010000010, 010000010, 010010010, 010010010, 011111110],
+							[011110000, 000010000, 000010000, 011111110, 000010000],
+							[011110010, 010010010, 010010010, 010010010, 010011110],
+							[011111110, 010010010, 010010010, 010010010, 010011110],
+							[010000000, 010000000, 010000000, 010000000, 011111110],
+							[011111110, 010010010, 010010010, 010010010, 011111110]]
+
+void oled_init();
+void oled_clearBands();
+void oled_updateDisplay(uint_32t * levelData);
+
+#endif

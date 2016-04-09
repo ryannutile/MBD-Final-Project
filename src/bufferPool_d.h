@@ -34,9 +34,8 @@
  */
 typedef struct {
 	QueueHandle_t freeList;
-  //queue_d_t    freeList;  /* List of free chunks */
-  chunk_d_t    *buffer;
-  //isrDisp_t  isrDisp; /* dispatcher for Rx Tx ISR */
+    chunk_d_t    *buffer;
+    unsigned int  bytesPerChunk;
 } bufferPool_d_t;
 
 
@@ -65,8 +64,9 @@ int bufferPool_d_init(bufferPool_d_t *pThis, int numChunks, int chunkSize);
  * @return Zero on success.
  * Negative value on failure.
  */
-int bufferPool_d_acquire(bufferPool_d_t *pThis, chunk_d_t **ppChunk, int chunkSize);
+int bufferPool_d_acquire(bufferPool_d_t *pThis, chunk_d_t **ppChunk);
 
+int bufferPool_d_acquire_ISR(bufferPool_d_t *pThis, chunk_d_t **ppChunk);
 /** Release chunk into the free list 
  *    - non blocking 
  *    - error on null passed 
@@ -103,4 +103,3 @@ int bufferPool_d_release_from_ISR(bufferPool_d_t *pThis, chunk_d_t *pChunk);
 int bufferPool_d_is_empty(bufferPool_d_t *pThis );
 
 #endif
-

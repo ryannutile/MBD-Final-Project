@@ -4,25 +4,24 @@
  *@brief
  *  - core module for audio player
  *
- * Target:   TLL6527v1-0      
- * Compiler: VDSP++     Output format: VDSP++ "*.dxe"
+ * Target:   Xilinx Zynq Zedboard
+ * Compiler/IDE: GCC - Xilinx SDK 2015.4
  *
  * @author:  Gunar Schirner
  *           Rohan Kangralkar
  * @date	03/08/2010
  *
  * LastChange:
- * $Id: audioPlayer.c 846 2014-02-27 15:35:54Z fengshen $
+ * $Id: audioPlayer.c 1009 2016-04-03 20:00:02Z surya2891 $
  *
  *******************************************************************************/
 
 #include "audioPlayer.h"
-#include "adau1761.h"
 #include "zedboard_freertos.h"
-#include "stdio.h"
+#include "audioRxTx.h"
+
 
 /* number of chunks to allocate */
-//TODO: up to 30 once heap size is increased
 #define CHUNK_NUM 30
 
 /* size of each chunk in bytes */
@@ -35,118 +34,88 @@
 #define VOLUME_CHANGE_STEP (4)
 /**
  * @def VOLUME_MAX
- * @brief MAX volume possible is +6db refer to ssm2603 manual
+ * @brief MAX volume possible is +6db Refer to COCDEC datasheet.
  */
 #define VOLUME_MAX (0x7F)
 /**
  * @def VOLUME_MIN
- * @brief MIN volume possible is -73db refer to ssm2603 manual
+ * @brief MIN volume possible is -73db Refer to COCDEC datasheet.
  */
 #define VOLUME_MIN (0x2F)
-
-
 /** initialize audio player 
- *@param pThis  pointer to own object 
+ *@param pThis  pointer to the AudioPlayer global instance.
  *
  *@return 0 success, non-zero otherwise
  **/
 int audioPlayer_init(audioPlayer_t *pThis) {
-    int                         status                  = 0;
-    
+    int status = 0;
     printf("[AP]: Init start\r\n");
     
     pThis->volume 		= VOLUME_MIN; /*default volume */
     pThis->frequency 	= 48000; /* default frequency */
     
+    /* Init I2C/I2S/CODEC and AXI Streaming FIFO */
+	Adau1761_Init(&pThis->codec);
 
-    /* init the codec */
-	adau1761_init(&(pThis->codec));
-
-	/* allocate buffer pool */
-	status = bufferPool_d_init(&(pThis->bp), CHUNK_NUM, CHUNK_SIZE);
-    if ( 1 != status ) {
-        return FAIL;
-    }
-    
-    /* Initialize the gpio ... (TBD) */
-    /* TODO insert code for GPIO init here */
-
-    /* Initialize the audio RX module*/
-    status = audioRx_init(&pThis->rx, &pThis->bp) ;
-    if ( 1 != status) {
+	/* Allocate buffer pool and Init Chunk/freelist*/
+	status = bufferPool_d_init(&pThis->bp, CHUNK_NUM, CHUNK_SIZE);
+    if ( PASS != status ) {
         return FAIL;
     }
 
-    /* Initialize the audio TX module */
-    status = audioTx_init(&pThis->tx, &pThis->bp);
-    if ( 1 != status ) {
+    /* Initialize the Audio RX/TX module*/
+    status = audioRxTx_init(&pThis->Audio, &pThis->bp) ;
+    if ( PASS != status) {
         return FAIL;
-    }   
-    
+    }
+
     printf("[AP]: Init complete\r\n");
-
     return PASS;
 }
 
 
-
-
-/** startup phase after initialization 
- *@param pThis  pointer to own object 
+/** audioPlayer task creation.
+ *@param pThis  pointer to the globally declared and initialized audioPlayer object
  *
  *@return 0 success, non-zero otherwise
  **/
 int audioPlayer_start(audioPlayer_t *pThis)
 {
     printf("[AP]: startup \r\n");
-    
-	/* create the audio task */
-	xTaskCreate( audioPlayer_task, ( signed char * ) "HW", configMINIMAL_STACK_SIZE, pThis, tskIDLE_PRIORITY + 1 , pThis );
-
-    
+	/* Audio Player task creation */
+	xTaskCreate( audioPlayer_task, ( signed char * ) "HW", configMINIMAL_STACK_SIZE, pThis, tskIDLE_PRIORITY + 1 , NULL );
     return PASS;
 }
 
 
 
 /** main loop of audio player does not terminate
- *@param pThis pointer to own object
+ *@param pThis  pointer to the globally declared and initialized audioPlayer object
  *
  *@return 0 success, non-zero otherwise
  **/
 void audioPlayer_task (void *pArg) {
     
-	int                      status = FAIL;
+	print_message("Hello world",2);
+	    print_message("How cool is this",3);
+
+	int status = FAIL;
 	audioPlayer_t *pThis = (audioPlayer_t *)  pArg;
-    
+	chunk_d_t *pChunk = NULL;
 
-	/* startup sub components */
-    /* Start the audio RX module */
-    status = audioRx_start(&pThis->rx);
-    if ( 1 != status) {
-    	/* how to indicate startup failure ?*/
+    /* Start the audio module (FIFO Interrupt Enable)*/
+    status = audioRxTx_start(&pThis->Audio);
+	if (status != 1) {
         return;
     }
 
-    /* Start the audio TX module */
-    status = audioTx_start(&pThis->tx);
-	if ( 1 != status) {
-    	/* how to indicate startup failure ?*/
-        return;
-    }
+	/* Main loop */
+	while(1)
+	{
+    		/** Get Audio Chunk */
+			audioRxTx_get(&pThis->Audio, &pChunk);
 
-	/* main loop */
-	while(1) {
-    	/** get audio chunk */
-		status = audioRx_get(&pThis->rx, &pThis->chunk);
-
-        /** If we have chunks that can be played then we provide them
-         * to the audio TX */
-        if ( 1 == status ) {
-          /** play audio chunk through speakers */
-          audioTx_put(&pThis->tx, pThis->chunk);
+			/* Transmit the data that was received from the RX Queue */
+			audioRxTx_put(&pThis->Audio, pChunk);
         }
-  }
-}
-
-
+	}
